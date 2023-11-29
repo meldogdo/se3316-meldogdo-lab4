@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>Search and Create List</title>
+
+</head>
+<body>
+<script defer src="script.js"></script>
+    <div class="container">
+        <div class="search-section">
+            <div class="search-bar">
+                <input type="text" placeholder="Enter search term..." id="searchTerm" onkeyup = "getHeroes()">
+                <select id="searchCriteria">
+                    <option value="nameOrId">Name or Id</option>
+                    <option value="race">Race</option>
+                    <option value="publisher">Publisher</option>
+                    <option value="power">Power</option>
+                    
+                </select>
+                <input type="number" placeholder="Number of Superheroes" min="1" id="numSuperheroes">
+                <input type="button" value="Search" id="searchButton">
+            <div id="status"></div>
+            <div id="inputError"></div>
+            </div>
+            <div class="search-power-by-id">
+                <input type="text" placeholder="Enter ID for Power Search" id="powerSearchId" onkeyup = "getPowers()" >
+                <input type="button" value="Search Powers" id="searchPowersBtn">
+                <input type="button" value="All Publishers" id="publishers" onclick="getPublishers()">
+            </div>
+        </div>
+        <div class="create-list-section">
+            <h2>Create Your List</h2>
+            <input type="text" placeholder="Name of the list..."  id="newListName">
+            <input type="text" placeholder="Contents..." id="newListItems">
+            <div class="align-center">
+                <input type="button" value="Create List" onclick="newList()">
+            </div>
+                <div class="delete-list-section">
+                    <h3>Delete List</h2>
+                    <input type="text" placeholder="List name..." id="deleteListName">
+                    <div class="align-center">
+                        <input type="button" value="Delete List" id="deleteListButton" onclick="deleteList()">
+                        
+                    </div>
+                </div>
+                <div class="view-list-section">
+                    <h4>View List</h2>
+                    <input type="text" placeholder="List name..." id="viewListName">
+                    <div class="align-center">
+                        <input type="button" value="View List" id="viewListButton" onclick="viewList()">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="display">
+<h5>Display</h5>
+<ol id="displayList"></ol>
+    </div>
+
+</body>
+</html>
