@@ -32,6 +32,40 @@ function integratePowers(info, powers) {
         return hero;
     });
 }
+const mongoose = require('mongoose');
+
+const HeroListSchema = new mongoose.Schema({
+    name: String,
+    creatorNickname: String,
+    heroes: [{
+        heroId: mongoose.Schema.Types.ObjectId,
+        rating: Number
+    }],
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now }
+});
+
+const HeroList = mongoose.model('HeroList', HeroListSchema);
+module.exports = HeroList;
+route.get('/hero-lists', async (req, res) => {
+    try {
+        const heroLists = await HeroList.find({})
+            .sort({ updatedAt: -1 })
+            .limit(10)
+            .lean();
+
+        // Calculating average ratings
+        heroLists.forEach(list => {
+            const totalRating = list.heroes.reduce((acc, hero) => acc + hero.rating, 0);
+            list.averageRating = list.heroes.length > 0 ? totalRating / list.heroes.length : 0;
+        });
+
+        res.json(heroLists);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
 
 const integratedSuperheroes = integratePowers(superheroInfo, superheroPowers);
 route.use(express.json());
@@ -137,7 +171,24 @@ route.put('/update-password', async (req, res) => {
     await accounts.updateOne({ email }, { $set: { password: hashedPassword } });
     res.send('Password updated successfully.');
 });
+route.get('/hero-lists', async (req, res) => {
+    try {
+        const heroLists = await HeroList.find({})
+            .sort({ updatedAt: -1 })
+            .limit(10)
+            .lean();
 
+        // Calculating average ratings
+        heroLists.forEach(list => {
+            const totalRating = list.heroes.reduce((acc, hero) => acc + hero.rating, 0);
+            list.averageRating = list.heroes.length > 0 ? totalRating / list.heroes.length : 0;
+        });
+
+        res.json(heroLists);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
 
 // Route to login (for handling disabled accounts)
 route.post('/login', async (req, res) => {
@@ -193,7 +244,7 @@ route.get('/verify-email', async (req, res) => {
     res.send('Email verified successfully.');
 });
 
-route.get('/search', (req, res) => {
+route.get('/search', authMiddleware,(req, res) => {
     const { name, race, power, publisher } = req.query;
     const filteredHeroes = integratedSuperheroes.filter(hero => {
         const isNameMatch = name ? hero.name.toLowerCase().startsWith(name.toLowerCase()) : true;
