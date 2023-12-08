@@ -1,15 +1,209 @@
 const express = require ('express');
-const Joi = require('joi')
+const { MongoClient } = require('mongodb');
+const secretKey = "Momo137910111@@@$$$";
+const Joi = require('joi');
+const fs = require('fs');
 const app = express();
-const port = 3000;
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
+app.use(cors());
+const port = 4000;
 const storage=[]
+const bcrypt = require('bcrypt');
 const route = express.Router();
 const superheros = require('./superhero_info.json');
 const powers = require('./superhero_powers.json');
 app.use(express.static('../client'));
 app.use("/api/heros",route)
+const uri = "mongodb://localhost:27017";
+const client = new MongoClient(uri);
+const superheroInfo = JSON.parse(fs.readFileSync('./superhero_info.json', 'utf8'));
+const superheroPowers = JSON.parse(fs.readFileSync('./superhero_powers.json', 'utf8'));
+
+function integratePowers(info, powers) {
+    const powersDict = powers.reduce((acc, heroPowers) => {
+        acc[heroPowers.hero_names] = heroPowers;
+        return acc;
+    }, {});
+    return info.map(hero => {
+        hero.superPowers = Object.entries(powersDict[hero.name] || {})
+            .filter(([power, value]) => value === 'True')
+            .map(([power, _]) => power);
+        return hero;
+    });
+}
+
+const integratedSuperheroes = integratePowers(superheroInfo, superheroPowers);
 route.use(express.json());
-    
+const crypto = require('crypto');
+const authMiddleware = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+  
+    const token = authHeader.split(' ')[1];
+    try {
+      const decodedToken = jwt.verify(token, secretKey);
+      req.userData = { userId: decodedToken.userId };
+      next();
+    } catch (error) {
+      res.status(401).json({ message: 'Authentication failed!' });
+    }
+  };
+  
+  
+// Connect to MongoDB
+async function connectToMongoDB() {
+    try {
+        await client.connect();
+        console.log('Connected to MongoDB');
+        return client.db('yourDatabase'); // Replace with your database name
+    } catch (e) {
+        console.error(e);
+        throw e;
+    }
+}
+
+
+
+// Account creation schema
+const accountSchema = Joi.object({
+    email: Joi.string().email().required(),
+    password: Joi.string().required(),
+    nickname: Joi.string().required()
+});
+
+route.post('/create-account', async (req, res) => {
+    try {
+        const { email, password, nickname } = req.body;
+        const { error } = accountSchema.validate({ email, password, nickname });
+        if (error) return res.status(400).send(error.details[0].message);
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const verificationToken = crypto.randomBytes(16).toString('hex');
+        const newAccount = { 
+            email, 
+            password: hashedPassword, 
+            nickname, 
+            isVerified: false, 
+            verificationToken 
+        };
+
+        const database = await connectToMongoDB();
+        const accounts = database.collection('accounts');
+
+        const existingAccount = await accounts.findOne({ email });
+        if (existingAccount) return res.status(400).send('Email already in use.');
+
+        await accounts.insertOne(newAccount);
+
+        // Generate verification link and print it in the console
+        const verificationLink = `http://localhost:${port}/api/heros/verify-email?token=${verificationToken}`;
+        console.log(`Verification Link: ${verificationLink}`);
+
+        res.status(201).send('Account created. Please check the console for verification link.');
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error creating account');
+    }
+});
+// Route to update password
+route.put('/update-password', async (req, res) => {
+    const { email, currentPassword, newPassword } = req.body;
+
+    if (!email || !currentPassword || !newPassword) {
+        return res.status(400).send('All fields are required.');
+    }
+
+    const database = await connectToMongoDB();
+    const accounts = database.collection('accounts');
+
+    const account = await accounts.findOne({ email });
+    if (!account) {
+        return res.status(404).send('Account not found.');
+    }
+
+    if (!account.isVerified) {
+        return res.status(403).send('Account is not verified.');
+    }
+
+    const isPasswordMatch = await bcrypt.compare(currentPassword, account.password);
+    if (!isPasswordMatch) {
+        return res.status(401).send('Invalid current password.');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await accounts.updateOne({ email }, { $set: { password: hashedPassword } });
+    res.send('Password updated successfully.');
+});
+
+
+// Route to login (for handling disabled accounts)
+route.post('/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        const database = await connectToMongoDB();
+        const accounts = database.collection('accounts');
+
+        const account = await accounts.findOne({ email });
+        if (!account) {
+            return res.status(404).json({ message: 'Account not found.' });
+        }
+
+        if (account.isDisabled) {
+            return res.status(403).json({ message: 'Account is disabled. Please contact the administrator.' });
+        }
+
+        const isPasswordMatch = await bcrypt.compare(password, account.password);
+        if (!isPasswordMatch) {
+            return res.status(401).json({ message: 'Invalid password.' });
+        }
+
+        if (!account.isVerified) {
+            return res.status(401).json({ message: 'Account is not verified. Please check your email.' });
+        }
+
+        // Create a token
+        const token = jwt.sign(
+            { userId: account._id, email: account.email }, 
+            secretKey, 
+            { expiresIn: '1h' } // Token expires in 1 hour
+        );
+
+        res.json({ message: 'Logged in successfully.', token: token });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'An error occurred during login.' });
+    }
+});
+
+route.get('/verify-email', async (req, res) => {
+    const { token } = req.query;
+
+    const database = await connectToMongoDB();
+    const accounts = database.collection('accounts');
+
+    const result = await accounts.updateOne({ verificationToken: token }, { $set: { isVerified: true } });
+    if (result.modifiedCount === 0) {
+        return res.status(404).send('Invalid or expired token.');
+    }
+
+    res.send('Email verified successfully.');
+});
+
+route.get('/search', (req, res) => {
+    const { name, race, power, publisher } = req.query;
+    const filteredHeroes = integratedSuperheroes.filter(hero => {
+        const isNameMatch = name ? hero.name.toLowerCase().startsWith(name.toLowerCase()) : true;
+        const isRaceMatch = race ? hero.Race.toLowerCase() === race.toLowerCase() : true;
+        const isPowerMatch = power ? hero.superPowers.map(p => p.toLowerCase()).includes(power.toLowerCase()) : true;
+        const isPublisherMatch = publisher ? hero.Publisher.toLowerCase() === publisher.toLowerCase() : true;
+        return isNameMatch && isRaceMatch && isPowerMatch && isPublisherMatch;
+    });
+    res.json(filteredHeroes);
+});
 
 route.get('/powers/:n/:power',(req, res) =>{
     const p=req.params.power

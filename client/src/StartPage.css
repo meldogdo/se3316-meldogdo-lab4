@@ -1,0 +1,14 @@
+
+.start-page {
+    text-align: center;
+    margin-top: 50px;
+  }
+  
+  .start-page .login {
+    margin-top: 20px;
+  }
+  
+  .start-page input {
+    margin: 5px;
+  }
+  
