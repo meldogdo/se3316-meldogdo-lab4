@@ -1,12 +1,61 @@
 import React, { useState, useEffect } from 'react';
 
+const HeroLists = () => {
+    const [heroLists, setHeroLists] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        const fetchHeroLists = async () => {
+            try {
+                const response = await fetch('http://localhost:4000/api/heros/hero-lists'); // Replace with your actual backend URL
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                setHeroLists(data);
+            } catch (e) {
+                setError(e.message);
+                console.error("Fetching hero lists failed:", e);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchHeroLists();
+    }, []);
+
+    if (loading) return <p>Loading...</p>;
+    if (error) return <p>Error loading hero lists: {error}</p>;
+
+    return (
+        <div>
+            <h2>Hero Lists</h2>
+            {heroLists.length > 0 ? (
+                <ul>
+                    {heroLists.map((list, index) => (
+                        <li key={index}>
+                            <h3>{list.name}</h3>
+                            <p>{list.description}</p>
+                            <p>Number of Heroes: {list.heroes.length}</p>
+                            <p>Average Rating: {list.averageRating}</p>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <p>No hero lists available.</p>
+            )}
+        </div>
+    );
+};
+
 const PublicHeroLists = () => {
     const [heroLists, setHeroLists] = useState([]);
 
     useEffect(() => {
         const fetchHeroLists = async () => {
             try {
-                const response = await fetch('http://localhost:4000/api/heros/public-hero-lists'); // Adjust the URL as needed
+                const response = await fetch('http://localhost:4000/api/heros/public-hero-lists');
                 const data = await response.json();
                 setHeroLists(data);
             } catch (error) {
@@ -19,15 +68,15 @@ const PublicHeroLists = () => {
 
     return (
         <div>
-            <h3>Public Hero Lists</h3>
+            <h2>Public Hero Lists</h2>
             {heroLists.length > 0 ? (
                 <ul>
                     {heroLists.map((list, index) => (
                         <li key={index}>
                             <p>Name: {list.name}</p>
                             <p>Creator: {list.creatorNickname}</p>
-                            <p>Number of Heroes: {list.heroes.length}</p>
-                            <p>Average Rating: {list.averageRating.toFixed(2)}</p>
+                            <p>Number of Heroes: {list.numberOfHeroes}</p>
+                            <p>Average Rating: {list.averageRating}</p>
                         </li>
                     ))}
                 </ul>
@@ -37,7 +86,6 @@ const PublicHeroLists = () => {
         </div>
     );
 };
-
 const SearchHeroes = () => {
     const [searchParams, setSearchParams] = useState({ name: '', race: '', power: '', publisher: '' });
     const [searchResults, setSearchResults] = useState([]);
@@ -112,8 +160,9 @@ const SearchHeroes = () => {
                     ))}
                 </ul>
             )}
-
-            <PublicHeroLists />
+           <PublicHeroLists />
+           <HeroLists />
+           
         </div>
     );
 };

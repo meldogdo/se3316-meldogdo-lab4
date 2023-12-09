@@ -16,6 +16,7 @@ const powers = require('./superhero_powers.json');
 app.use(express.static('../client'));
 app.use("/api/heros",route)
 const uri = "mongodb://localhost:27017";
+
 const client = new MongoClient(uri);
 const superheroInfo = JSON.parse(fs.readFileSync('./superhero_info.json', 'utf8'));
 const superheroPowers = JSON.parse(fs.readFileSync('./superhero_powers.json', 'utf8'));
@@ -32,42 +33,6 @@ function integratePowers(info, powers) {
         return hero;
     });
 }
-const mongoose = require('mongoose');
-
-const HeroListSchema = new mongoose.Schema({
-    name: { type: String, required: true, unique: true },
-    description: String,
-    heroes: [{
-        heroId: mongoose.Schema.Types.ObjectId,
-        rating: Number
-    }],
-    visibility: { type: String, default: 'private' },
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now }
-});
-
-const HeroList = mongoose.model('HeroList', HeroListSchema);
-module.exports = HeroList;
-route.get('/hero-lists', async (req, res) => {
-    try {
-        const heroLists = await HeroList.find({})
-            .sort({ updatedAt: -1 })
-            .limit(10)
-            .lean();
-
-        // Calculating average ratings
-        heroLists.forEach(list => {
-            const totalRating = list.heroes.reduce((acc, hero) => acc + hero.rating, 0);
-            list.averageRating = list.heroes.length > 0 ? totalRating / list.heroes.length : 0;
-        });
-
-        res.json(heroLists);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-});
-
 
 const integratedSuperheroes = integratePowers(superheroInfo, superheroPowers);
 route.use(express.json());
@@ -87,28 +52,71 @@ const authMiddleware = (req, res, next) => {
       res.status(401).json({ message: 'Authentication failed!' });
     }
   };
-  
+  let db
   
 // Connect to MongoDB
 async function connectToMongoDB() {
     try {
         await client.connect();
         console.log('Connected to MongoDB');
-        return client.db('yourDatabase'); // Replace with your database name
+        db = client.db('yourDatabase');
     } catch (e) {
         console.error(e);
         throw e;
     }
 }
-
-
-
 // Account creation schema
 const accountSchema = Joi.object({
     email: Joi.string().email().required(),
     password: Joi.string().required(),
     nickname: Joi.string().required()
 });
+
+
+const HeroListSchema = new mongoose.Schema({
+    name: { type: String, required: true, unique: true },
+    description: String,
+    heroes: [{ type: String, required: true }], // Assuming heroes are referenced by IDs as strings
+    isPrivate: { type: Boolean, default: true },
+    lastModified: { type: Date, default: Date.now },
+    reviews: [{
+        // Define the structure of reviews here
+        userId: mongoose.Schema.Types.ObjectId,
+        rating: Number,
+        comment: String
+    }],
+    averageRating: { type: Number, default: 0 }
+});
+
+
+route.post('/create-hero-list', async (req, res) => {
+    try {
+        const { name, description, heroes, isPrivate } = req.body;
+        console.log(req.body)
+        const newList = new HeroList({
+            name,
+            description,
+            heroes: heroes.split(',').map(heroId => heroId.trim()),
+            isPrivate
+        });
+
+        await newList.save();
+        res.status(201).json(newList);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error creating hero list' });
+    }
+});
+route.get('/hero-lists', async (req, res) => {
+    try {
+        const heroLists = await HeroList.find({}).sort({ lastModified: -1 }).limit(20).lean();
+        res.json(heroLists);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error fetching hero lists' });
+    }
+});
+
 
 route.post('/create-account', async (req, res) => {
     try {
@@ -145,9 +153,8 @@ route.post('/create-account', async (req, res) => {
     }
 });
 // Route to update password
-route.put('/update-password', async (req, res) => {
+route.put('/update-password',authMiddleware, async (req, res) => {
     const { email, currentPassword, newPassword } = req.body;
-
     if (!email || !currentPassword || !newPassword) {
         return res.status(400).send('All fields are required.');
     }
@@ -173,43 +180,14 @@ route.put('/update-password', async (req, res) => {
     await accounts.updateOne({ email }, { $set: { password: hashedPassword } });
     res.send('Password updated successfully.');
 });
-route.get('/my-lists',async (req, res) => {
-    try {
-        const userId = req.userData.userId;
-        const userLists = await HeroList.find({ createdBy: userId }).limit(20);
-        res.json(userLists);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Error fetching lists' });
-    }
-});
-route.get('/hero-lists', async (req, res) => {
-    try {
-        const heroLists = await HeroList.find({})
-            .sort({ updatedAt: -1 })
-            .limit(10)
-            .lean();
 
-        // Calculating average ratings
-        heroLists.forEach(list => {
-            const totalRating = list.heroes.reduce((acc, hero) => acc + hero.rating, 0);
-            list.averageRating = list.heroes.length > 0 ? totalRating / list.heroes.length : 0;
-        });
 
-        res.json(heroLists);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-});
 
-// Route to login (for handling disabled accounts)
+
 route.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-
-        const database = await connectToMongoDB();
-        const accounts = database.collection('accounts');
-
+        const accounts = db.collection('accounts');
         const account = await accounts.findOne({ email });
         if (!account) {
             return res.status(404).json({ message: 'Account not found.' });
@@ -254,60 +232,6 @@ route.get('/verify-email', async (req, res) => {
     }
 
     res.send('Email verified successfully.');
-});
-route.post('/create-list', authMiddleware, async (req, res) => {
-    try {
-        const { name, description, heroes, visibility } = req.body;
-
-        // Validate user is verified
-        const userId = req.userData.userId;
-        const user = await accounts.findOne({ _id: userId });
-        if (!user.isVerified) {
-            return res.status(403).send('User account is not verified.');
-        }
-
-        // Create new hero list
-        const newList = new HeroList({
-            name,
-            description,
-            heroes,
-            visibility,
-            createdBy: userId
-        });
-
-        await newList.save();
-        res.status(201).json(newList);
-    } catch (error) {
-        console.error(error);
-        res.status(500).send('Error creating hero list');
-    }
-});
-route.post('/create-list',  async (req, res) => {
-    try {
-        const { name, description, heroes, visibility } = req.body;
-
-        // Validate user is verified
-        const userId = req.userData.userId;
-        const user = await accounts.findOne({ _id: userId });
-        if (!user.isVerified) {
-            return res.status(403).send('User account is not verified.');
-        }
-
-        // Create new hero list
-        const newList = new HeroList({
-            name,
-            description,
-            heroes,
-            visibility,
-            createdBy: userId
-        });
-
-        await newList.save();
-        res.status(201).json(newList);
-    } catch (error) {
-        console.error(error);
-        res.status(500).send('Error creating hero list');
-    }
 });
 route.get('/search', authMiddleware,(req, res) => {
     const { name, race, power, publisher } = req.query;
@@ -639,6 +563,10 @@ route.delete('/list/:n/delete',(req, res)=>{
     }
 });
 
-app.listen (port,() =>{
-    console.log(`Listening on port ${port}...`);
-});
+connectToMongoDB()
+    .then(() => {
+        app.listen(port, () => {
+            console.log(`Listening on port ${port}...`);
+        });
+    })
+    .catch(console.error);
