@@ -103,12 +103,17 @@ route.post('/create-hero-list', async (req, res) => {
 
 route.get('/hero-lists', async (req, res) => {
     try {
-        const db = await connectToMongoDB();
-        console.log(db)
-        const collection = db.collection('heroLists');
+        // Ensure user is authenticated
+        if (!req.userData || !req.userData.userId) {
+            return res.status(401).json({ message: 'Unauthorized' });
+        }
 
-        // Fetch hero lists sorted by lastModified in descending order
-        const heroLists = await collection.find({})
+        const db = await connectToMongoDB();
+        const collection = db.collection('heroLists');
+        const userId = req.userData.userId; // Extract the user ID from the request
+
+        // Fetch hero lists created by the logged-in user, sorted by lastModified
+        const heroLists = await collection.find({ createdBy: userId })
                                           .sort({ lastModified: -1 })
                                           .limit(20)
                                           .toArray();
@@ -119,6 +124,7 @@ route.get('/hero-lists', async (req, res) => {
         res.status(500).json({ message: 'Error fetching hero lists' });
     }
 });
+
 
 
 
