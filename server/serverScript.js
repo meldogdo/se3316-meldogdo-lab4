@@ -60,6 +60,7 @@ async function connectToMongoDB() {
         await client.connect();
         console.log('Connected to MongoDB');
         db = client.db('yourDatabase');
+        return db
     } catch (e) {
         console.error(e);
         throw e;
@@ -73,49 +74,52 @@ const accountSchema = Joi.object({
 });
 
 
-const HeroListSchema = new mongoose.Schema({
-    name: { type: String, required: true, unique: true },
-    description: String,
-    heroes: [{ type: String, required: true }], // Assuming heroes are referenced by IDs as strings
-    isPrivate: { type: Boolean, default: true },
-    lastModified: { type: Date, default: Date.now },
-    reviews: [{
-        // Define the structure of reviews here
-        userId: mongoose.Schema.Types.ObjectId,
-        rating: Number,
-        comment: String
-    }],
-    averageRating: { type: Number, default: 0 }
-});
 
 
 route.post('/create-hero-list', async (req, res) => {
     try {
         const { name, description, heroes, isPrivate } = req.body;
-        console.log(req.body)
-        const newList = new HeroList({
+        const newList = {
             name,
             description,
             heroes: heroes.split(',').map(heroId => heroId.trim()),
-            isPrivate
-        });
+            isPrivate,
+            lastModified: new Date(),
+            reviews: [],
+            averageRating: 0
+        };
 
-        await newList.save();
-        res.status(201).json(newList);
+        const db = await connectToMongoDB();
+        const collection = db.collection('heroLists');
+        const result = await collection.insertOne(newList);
+
+        res.status(201).json(result);
+        
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Error creating hero list' });
     }
 });
+
 route.get('/hero-lists', async (req, res) => {
     try {
-        const heroLists = await HeroList.find({}).sort({ lastModified: -1 }).limit(20).lean();
+        const db = await connectToMongoDB();
+        console.log(db)
+        const collection = db.collection('heroLists');
+
+        // Fetch hero lists sorted by lastModified in descending order
+        const heroLists = await collection.find({})
+                                          .sort({ lastModified: -1 })
+                                          .limit(20)
+                                          .toArray();
+
         res.json(heroLists);
     } catch (error) {
-        console.error(error);
+        console.error('Error fetching hero lists:', error);
         res.status(500).json({ message: 'Error fetching hero lists' });
     }
 });
+
 
 
 route.post('/create-account', async (req, res) => {

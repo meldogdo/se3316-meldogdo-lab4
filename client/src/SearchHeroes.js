@@ -1,4 +1,93 @@
 import React, { useState, useEffect } from 'react';
+const CreateHeroList = () => {
+    const [formData, setFormData] = useState({
+        name: '',
+        description: '',
+        heroes: '',
+        isPrivate: true
+    });
+
+    const handleChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setFormData(prevFormData => ({
+            ...prevFormData,
+            [name]: type === 'checkbox' ? checked : value
+        }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+
+        try {
+            const response = await fetch('http://localhost:4000/api/heros/create-hero-list', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: formData.name,
+                    description: formData.description,
+                    heroes: formData.heroes,
+                    isPrivate: formData.isPrivate
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log(result);
+            // Handle success
+            alert('Hero list created successfully!');
+        } catch (error) {
+            console.error('Error creating hero list:', error);
+            alert('Error creating hero list');
+        }
+    };
+
+    return (
+        <div>
+            <h2>Create Hero List</h2>
+            <form onSubmit={handleSubmit}>
+                <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    placeholder="List Name"
+                    required
+                />
+                <br />
+                <textarea
+                    name="description"
+                    value={formData.description}
+                    onChange={handleChange}
+                    placeholder="Description"
+                />
+                <br />
+                <input
+                    type="text"
+                    name="heroes"
+                    value={formData.heroes}
+                    onChange={handleChange}
+                    placeholder="Hero IDs (comma separated)"
+                    required
+                />
+                <br />
+                <label>
+                    <input
+                        type="checkbox"
+                        name="isPrivate"
+                        checked={formData.isPrivate}
+                        onChange={handleChange}
+                    />
+                    Private List
+                </label>
+                <br />
+                <button type="submit">Create List</button>
+            </form>
+        </div>
+    );
+};
 
 const HeroLists = () => {
     const [heroLists, setHeroLists] = useState([]);
@@ -160,6 +249,7 @@ const SearchHeroes = () => {
                     ))}
                 </ul>
             )}
+            <CreateHeroList />
            <PublicHeroLists />
            <HeroLists />
            
