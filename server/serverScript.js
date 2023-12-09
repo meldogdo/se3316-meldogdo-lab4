@@ -35,12 +35,14 @@ function integratePowers(info, powers) {
 const mongoose = require('mongoose');
 
 const HeroListSchema = new mongoose.Schema({
-    name: String,
-    creatorNickname: String,
+    name: { type: String, required: true, unique: true },
+    description: String,
     heroes: [{
         heroId: mongoose.Schema.Types.ObjectId,
         rating: Number
     }],
+    visibility: { type: String, default: 'private' },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }
 });
@@ -171,6 +173,16 @@ route.put('/update-password', async (req, res) => {
     await accounts.updateOne({ email }, { $set: { password: hashedPassword } });
     res.send('Password updated successfully.');
 });
+route.get('/my-lists',async (req, res) => {
+    try {
+        const userId = req.userData.userId;
+        const userLists = await HeroList.find({ createdBy: userId }).limit(20);
+        res.json(userLists);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error fetching lists' });
+    }
+});
 route.get('/hero-lists', async (req, res) => {
     try {
         const heroLists = await HeroList.find({})
@@ -243,7 +255,60 @@ route.get('/verify-email', async (req, res) => {
 
     res.send('Email verified successfully.');
 });
+route.post('/create-list', authMiddleware, async (req, res) => {
+    try {
+        const { name, description, heroes, visibility } = req.body;
 
+        // Validate user is verified
+        const userId = req.userData.userId;
+        const user = await accounts.findOne({ _id: userId });
+        if (!user.isVerified) {
+            return res.status(403).send('User account is not verified.');
+        }
+
+        // Create new hero list
+        const newList = new HeroList({
+            name,
+            description,
+            heroes,
+            visibility,
+            createdBy: userId
+        });
+
+        await newList.save();
+        res.status(201).json(newList);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send('Error creating hero list');
+    }
+});
+route.post('/create-list',  async (req, res) => {
+    try {
+        const { name, description, heroes, visibility } = req.body;
+
+        // Validate user is verified
+        const userId = req.userData.userId;
+        const user = await accounts.findOne({ _id: userId });
+        if (!user.isVerified) {
+            return res.status(403).send('User account is not verified.');
+        }
+
+        // Create new hero list
+        const newList = new HeroList({
+            name,
+            description,
+            heroes,
+            visibility,
+            createdBy: userId
+        });
+
+        await newList.save();
+        res.status(201).json(newList);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send('Error creating hero list');
+    }
+});
 route.get('/search', authMiddleware,(req, res) => {
     const { name, race, power, publisher } = req.query;
     const filteredHeroes = integratedSuperheroes.filter(hero => {
