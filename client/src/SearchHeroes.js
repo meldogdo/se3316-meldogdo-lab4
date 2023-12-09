@@ -97,7 +97,7 @@ const HeroLists = () => {
     useEffect(() => {
         const fetchHeroLists = async () => {
             try {
-                const response = await fetch('http://localhost:4000/api/heros/hero-lists'); // Replace with your actual backend URL
+                const response = await fetch('https://localhost:4000/api/heros/hero-lists'); // Replace with your actual backend URL
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
